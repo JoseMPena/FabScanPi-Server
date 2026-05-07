@@ -109,11 +109,23 @@ class FSScanner(threading.Thread):
             time.sleep(0.2)
 
     def kill(self):
-        self.scanActor.stop()
-        self.scheduler.shutdown()
-        # wait some time for hardware shutdown
-        time.sleep(1)
         self.exit = True
+        self._stop_actor(self.scanActor, "Scan actor")
+        self._stop_actor(self.calibrationActor, "Calibration actor")
+        try:
+            self.scheduler.shutdown(wait=False)
+        except Exception:
+            pass
+
+    def _stop_actor(self, actor, name):
+        if actor is None:
+            return
+        try:
+            actor.stop(block=True, timeout=3)
+        except TypeError:
+            actor.stop()
+        except Exception as e:
+            self._logger.warning("{0} did not stop cleanly: {1}".format(name, e))
 
 
     def on_command(self, mgr, event):

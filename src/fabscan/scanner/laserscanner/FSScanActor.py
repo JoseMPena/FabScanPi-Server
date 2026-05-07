@@ -509,13 +509,11 @@ class FSScanActor(FSScanActorInterface):
     def on_stop(self):
         self.stop_scan()
 
-        #self.hardwareController.destroy_camera_device()
-        #self.finishFiles()
-
         self.hardwareController.turntable.stop_turning()
         self.hardwareController.led.off()
         for laser_index in range(self.config.file.laser.numbers):
             self.hardwareController.laser.off(laser_index)
+        self.hardwareController.stop_camera_stream()
 
     # on stop command by user
     def stop_scan(self):

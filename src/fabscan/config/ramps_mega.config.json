@@ -1,0 +1,76 @@
+{
+    "folders": {
+        "www": "/usr/share/fabscanpi/",
+        "scans": "/home/pi/scans/"
+    },
+    "laser": {
+        "interleaved": "False",
+        "numbers": 2,
+        "color": "R (RGB)"
+    },
+    "scanner_type": "laserscanner",
+    "calibration": {
+        "weight_matrix": [],
+        "dist_camera_matrix": [],
+        "pattern": {
+            "square_size": 10,
+            "rows": 6,
+            "columns": 8,
+            "origin_distance": 37.2,
+            "type": "chessboard"
+        },
+        "camera_matrix": [],
+        "distortion_vector": [],
+        "laser_planes": [
+            {
+                "deviation": 0,
+                "distance": 0,
+                "normal": []
+            },
+            {
+                "deviation": 0,
+                "distance": 0,
+                "normal": []
+            }
+        ],
+        "platform_translation": [],
+        "platform_rotation": []
+    },
+    "meshlab": {
+        "path": "/usr/bin/"
+    },
+    "process_numbers": 3,
+    "turntable": {
+        "steps": 3200,
+        "radius": 70,
+        "height": 155
+    },
+    "camera": {
+        "resolution": {
+            "width": 1648,
+            "height": 1232
+        },
+        "preview_resolution": {
+            "width": 800,
+            "height": 600
+        },
+        "rotate": "True",
+        "hflip": "True",
+        "vflip": "False",
+        "type": "PICAM",
+        "undistort": "False"
+    },
+    "connector": {
+        "type": "serial",
+        "firmware": "fabscanpi",
+        "baudrate": 57600,
+        "autoflash": "False",
+        "flash_baudrate": 57600,
+        "port": "/dev/Arduino"
+    },
+    "texture_illumination": 160,
+    "keep_raw_images": "False",
+    "keep_calibration_raw_images": "False",
+    "discoverable": "True",
+    "online_lookup_ip": "8.8.8.8"
+}

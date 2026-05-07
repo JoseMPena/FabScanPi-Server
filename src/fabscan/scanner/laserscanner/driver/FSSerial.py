@@ -8,12 +8,13 @@ import os
 import glob
 import serial
 import time
-import sys
 import logging
+import threading
 from fabscan.lib.util.FSUtil import FSSystem
 from fabscan.lib.util.FSInject import inject
 from fabscan.FSConfig import ConfigInterface
 from fabscan.scanner.interfaces.FSHardwareConnector import FSHardwareConnectorInterface
+from fabscan.scanner.laserscanner.driver.FSSerialProtocol import read_response_until_ready
 
 @inject(
     config=ConfigInterface
@@ -36,6 +37,7 @@ class FSSerialCom(FSHardwareConnectorInterface):
             self.flash_baudrate = 57600
 
         self.buf = bytearray()
+        self._command_lock = threading.RLock()
 
         self._baudrate = self.config.file.connector.baudrate
         self._serial = None
@@ -48,8 +50,11 @@ class FSSerialCom(FSHardwareConnectorInterface):
         self._stop = False
 
     def avr_device_is_available(self):
-        status = FSSystem.run_command("sudo avrdude-autoreset -p m328p -b {0} -carduino -P{1}".format(self.flash_baudrate, self._port))
-        return status == 0
+       # status = FSSystem.run_command("sudo avrdude-autoreset -p m328p -b {0} -carduino -P{1}".format(self.flash_baudrate, self._port))
+       # return status == 0
+       # Forced to True to bypass avrdude check for RAMPS/Mega
+       self._logger.info("Bypassing AVR device check for RAMPS 1.4")
+       return True
 
     def avr_flash(self, fname):
         FSSystem.run_command("wc -l {0}".format(fname))
@@ -62,115 +67,79 @@ class FSSerialCom(FSHardwareConnectorInterface):
         self._logger.debug("Trying to connect Arduino on port: {0}".format(self._port))
         # open serial port
         try:
+            self._logger.info("Trying on baudrate: {0}".format(self._baudrate))
             self._serial = serial.Serial(str(self._port), int(self._baudrate), timeout=3)
             time.sleep(1)
-        except:
+        except Exception:
             self._logger.error("Could not open serial port")
+            self._serial = None
 
     def _close(self):
-        self._serial.close()
+        if self._serial:
+            self._serial.close()
 
     def _openSerial(self):
-        basedir = os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(os.path.realpath(__file__)))))
-        flash_file_version = max(sorted(glob.iglob(basedir+'/firmware/'+str(self.config.file.connector.firmware)+'_*.hex'),  key=os.path.getctime, reverse=True))
-
-        flash_version_number = os.path.basename(os.path.normpath(os.path.splitext(flash_file_version.split('_', 1)[-1])[0]))
-
-        self._logger.debug("Latest available firmware version is: {0}".format(flash_version_number))
+        # We skip the firmware hex file lookups to avoid errors if no hex exists
+        self._logger.debug("Bypassing firmware version lookups for RAMPS 1.4")
 
         try:
-           # check if device is available
-           if self.avr_device_is_available():
-                   time.sleep(0.5)
-                   # try to connect to arduino
-                   self._connect()
+            # 1. Try to connect
+            self._connect()
 
-                   # if connection is opened successfully
-                   if self._serial.isOpen():
-                           current_version = self.checkVersion()
-                           self._logger.debug("Installed firmware version: {0}".format(current_version))
-                           # check if autoflash is active
-                           if self.config.file.connector.autoflash == "True":
-                               ## check if firmware is up to date, if not flash new firmware
-                               if not current_version == flash_version_number:
-                                   self._close()
-                                   self._logger.info("Old or no firmare detected trying to flash current firmware...")
-                                   if self.avr_flash(flash_file_version):
-                                        time.sleep(0.5)
-                                        self._connect()
-                                        current_version = self.checkVersion()
-                                        self._logger.info("Successfully flashed new Firmware Version: {0}".format(current_version))
-
-
-                   # no firmware is installed, flash firmware
-                   else:
-                            # if auto flash is activated
-                            if self.config.file.connector.autoflash == "True":
-                                    self._logger.info("No firmware detected trying to flash firmware...")
-                                    if self.avr_flash(flash_file_version):
-                                        time.sleep(0.5)
-                                        self._connect()
-                                        current_version = self.checkVersion()
-                                        self._logger.info("Successfully flashed Firmware Version: {0}".format(current_version))
-           else:
-                    self._logger.error("Communication error on port {0} try other flashing baudrate than {1}. Maybe corrupted bootloader.".format(self._port, self.flash_baudrate))
-
-
-           # set connection states and version
-           if self._serial.isOpen() and (current_version != "None"):
-                  self._logger.info("FabScanPi is connected to FabScanPi HAT or compatible on port: {0}".format(self._port))
-                  current_version = self.checkVersion()
-                  self._firmware_version = current_version
-                  self._connected = True
-           else:
-                  self._logger.error("Can not find Arduino or FabScanPi HAT")
-                  self._connected = False
-                  sys.exit(1)
+            # 2. If port is open, bypass the logic and force connection states
+            if self._serial and self._serial_is_open():
+                current_version = self.checkVersion()
+                if current_version != "None":
+                    self._firmware_version = current_version
+                    self._connected = True
+                    self._logger.info("Connected to RAMPS on port: {0}, firmware: {1}".format(self._port, current_version))
+                else:
+                    self._logger.error("RAMPS serial port opened on {0}, but firmware did not answer M200.".format(self._port))
+                    self._connected = False
+            else:
+                self._logger.error("Physical port {0} could not be opened.".format(self._port))
+                self._connected = False
 
         except Exception as e:
-            self._logger.error("Fatal FabScanPi HAT or compatible connection error: {0}".format(e))
-            sys.exit(1)
+            self._logger.error("Fatal connection error: {0}".format(e))
+            self._connected = False
+
+    def _serial_is_open(self):
+        if hasattr(self._serial, "isOpen"):
+            return self._serial.isOpen()
+        return self._serial.is_open
 
     def checkVersion(self):
-        if self._serial:
-            try:
+        if not self._serial:
+            return "None"
+        try:
+            with self._command_lock:
                 self._serial.write("\r\n\r\n".encode())
                 time.sleep(2) # Wait for FabScan to initialize
                 self._serial.flushInput() # Flush startup text in serial input
-                self.send("M200;")
-                #command = self.send_and_receive("M200;")
-
-                self._serial.readline()
-                # receive version number
-                value = self._serial.readline()
-                value = value.strip()
-                if value != "":
-                    return value.decode()
-                else:
-                    return "None"
-            except Exception as e:
-                self._logger.error("Check Version Error: {0}".format(e))
-        else:
+            value = self.send_and_receive("M200")
+            return value if value else "None"
+        except Exception as e:
+            self._logger.error("Check Version Error: {0}".format(e))
             return "None"
 
     def send_and_receive(self, message):
 
-        self.send(message)
-        self._serial.flush()
-        while True:
+        if not self._serial:
+            return ""
 
+        with self._command_lock:
             try:
-                command = self.readline()
-                command = self.readline()
-                return command.decode()
+                self.send(message)
+                self._serial.flush()
+                return read_response_until_ready(self.readline)
             except Exception as e:
                 self._logger.debug("Send/Receive Error: {0}".format(e))
-                break
-
-            del command
-
+                return ""
 
     def readline(self):
+        if not self._serial:
+            return b""
         read_timeout = False
         try:
             i = self.buf.find(b"\n")
@@ -197,15 +166,23 @@ class FSSerialCom(FSHardwareConnectorInterface):
                     return r
                 else:
                     self.buf.extend(data)
+            # Inner loop exited due to timeout without a full line (PySerial returns b'').
+            return b""
         except Exception as err:
             self._logger.error("Serial Error occured: {0}".format(err))
+            self._connected = False
+            return b""
 
 
     def flush(self):
+       if not self._serial:
+           return
        self._serial.flushInput()
        self._serial.flushOutput()
 
     def send(self, message):
+        if not self._serial:
+            return
         try:
             message = message + "\n"
             self._serial.write(message.encode())
@@ -246,7 +223,7 @@ class FSSerialCom(FSHardwareConnectorInterface):
         self.send_and_receive(command)
 
     def light_on(self, red, green, blue):
-        command = "M04 R{0} G{1} B{2}".format(red, green, blue)
+        command = "M05 R{0} G{1} B{2}".format(red, green, blue)
         self.send_and_receive(command)
 
     def light_off(self):

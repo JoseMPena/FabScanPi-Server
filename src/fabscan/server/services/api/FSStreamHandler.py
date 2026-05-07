@@ -1,9 +1,7 @@
-import tornado.ioloop
 import tornado.web
 import tornado.gen
 import time
 import logging
-import threading
 import cv2
 import numpy as np
 from fabscan.scanner.interfaces.FSScanActor import FSScanActorCommand
@@ -64,7 +62,6 @@ class FSStreamHandler(tornado.web.RequestHandler):
         input: None
         :return: yields mjpeg stream with http header
         """
-        ioloop = tornado.ioloop.IOLoop.current()
         self._logger.debug("mjpeg stream started.")
         stream_type = self.get_argument('type', True)
 
@@ -87,12 +84,17 @@ class FSStreamHandler(tornado.web.RequestHandler):
                 self.served_image_timestamp = time.time()
                 self.flush()
 
+            except RuntimeError as e:
+                err = str(e).lower()
+                if 'interpreter shutdown' in err or 'cannot schedule new futures' in err:
+                    self._logger.debug("mjpeg stream ended during process shutdown")
+                    break
+                self._logger.warning("mjpeg stream stopped: {0}".format(e))
+                break
             except Exception as e:
                 self._logger.warning("mjpeg stream stopped: {0}".format(e))
 
     def on_finish(self):
-        time.sleep(2)
-        self.scanActor
         self.stop_mjpeg = False
         self._logger.debug("Stream Handler Finished.")
 

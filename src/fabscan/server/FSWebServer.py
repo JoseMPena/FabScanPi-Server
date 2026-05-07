@@ -79,4 +79,14 @@ class FSWebServer(threading.Thread):
             sys.exit(0)
 
     def kill(self):
-        tornado.ioloop.IOLoop.instance().stop()
+        # Stop must run on the IOLoop thread; calling stop() from another thread is unreliable
+        # and can leave the service wedged until systemd SIGKILL (default ~90s stop timeout).
+        io_loop = tornado.ioloop.IOLoop.instance()
+
+        def _stop():
+            io_loop.stop()
+
+        try:
+            io_loop.add_callback(_stop)
+        except Exception:
+            _stop()

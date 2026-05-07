@@ -39,13 +39,18 @@ def register_to_discovery(server_version, firmware_version):
         'firmware_version': str(firmware_version)
     }
     try:
-        response = requests.post(DISCOVERY_URL, headers=headers, data=json.dumps(payload))
+        response = requests.post(DISCOVERY_URL, headers=headers, data=json.dumps(payload), timeout=5)
 
         response.raise_for_status()
         if response.status_code == 200:
             _logger.info('Successfully registered to find.fabscan.org')
+            return True
         else:
-            _logger.warn('Not able to register to find.fabscan.org')
+            _logger.warning('Not able to register to find.fabscan.org')
 
     except requests.ConnectionError:
-        _logger.warn('Can not register to FabScan Discovery Service, Device seems to be offline.')
+        _logger.warning('Can not register to FabScan Discovery Service, Device seems to be offline.')
+    except requests.RequestException as e:
+        _logger.warning('Can not register to FabScan Discovery Service: {0}'.format(e))
+
+    return False

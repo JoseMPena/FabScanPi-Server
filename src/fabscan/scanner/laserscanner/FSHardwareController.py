@@ -48,10 +48,16 @@ class FSHardwareControllerSingleton(FSHardwareControllerInterface):
         self.laser = Laser(self.hardware_connector)
         self.led = Led(self.hardware_connector)
 
-        self.led.on(255, 255, 255)
-        time.sleep(0.5)
-        self.camera = FSCameraFactory.create(self.config.file.camera.type).start_stream()
-        self.led.off()
+        try:
+            self.led.on(255, 255, 255)
+            time.sleep(0.5)
+            self._logger.info("Starting camera type: {0}".format(self.config.file.camera.type))
+            self.camera = FSCameraFactory.create(self.config.file.camera.type).start_stream()
+        except Exception:
+            self._logger.exception("Camera startup failed.")
+            raise
+        finally:
+            self.led.off()
 
         self._logger.debug("Reset FabScanPi HAT...")
         self.reset_devices()
@@ -186,14 +192,13 @@ class FSHardwareControllerSingleton(FSHardwareControllerInterface):
         return self.hardware_connector.get_firmware_version()
 
     def camera_is_connected(self):
-       return True
-       #TODO: implement this
-       #return self.camera.is_connected()
+       return self.camera is not None
 
     def start_camera_stream(self):
        self.camera = FSCameraFactory.create(self.config.file.camera.type).start_stream()
 
     def stop_camera_stream(self):
-       self.camera.stop_stream()
-       self.camera = None
+       if self.camera:
+           self.camera.stop_stream()
+           self.camera = None
 

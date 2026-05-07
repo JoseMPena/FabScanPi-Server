@@ -10,6 +10,7 @@ import sys
 import os
 
 from .FSWebServer import FSWebServer
+from .FSShutdown import stop_thread_service
 from fabscan.FSVersion import __version__
 from fabscan.lib.util.FSInject import injector
 from fabscan.lib.util.FSUtil import FSSystem, FSSystemExit
@@ -59,12 +60,8 @@ class FSScanServer(object):
         os.execl(python, python, *sys.argv)
 
     def exit_services(self):
-        self.webserver.kill()
-        self._logger.debug("Waiting for Webserver exit...")
-
-        self.scanner.kill()
-        self._logger.debug("Waiting for Scanner exit...")
-        self.scanner.join()
+        stop_thread_service(self.webserver, self._logger, "Webserver", timeout=4)
+        stop_thread_service(self.scanner, self._logger, "Scanner", timeout=12)
 
     def create_services(self):
 
@@ -106,7 +103,6 @@ class FSScanServer(object):
         self._logger.info("FabScanPi-Server " + str(__version__))
 
         try:
-
             self.create_services()
 
             while not self.system_exit.kill:

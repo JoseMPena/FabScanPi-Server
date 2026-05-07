@@ -6,11 +6,14 @@ __maintainer__ = "Mario Lukas"
 __email__ = "info@mariolukas.de"
 
 import fabscan
-import os
+
 
 def main():
-    os.system('/usr/bin/avrdude-autoreset -c arduino -p m328p -P /dev/ttyAMA0 -b 115200  -l /dev/null')
+    # Do not run avrdude here: it reserves the serial port for ~1 minute, uses the
+    # FabScanPi HAT profile (-p m328p), and conflicts with RAMPS/Mega2560 setups.
+    # Flash firmware manually when needed; optional probes belong behind config.
     fabscan.main()
+
 
 if __name__ == "__main__":
     main()
